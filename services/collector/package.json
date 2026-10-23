@@ -1,0 +1,19 @@
+{
+  "name": "metrics-collector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ingests telemetry, stores it in PostgreSQL, runs the alert engine, fires webhooks and streams live updates over WebSockets.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@imd/core": "file:../../packages/core",
+    "express": "4.22.3",
+    "pg": "8.23.1",
+    "ws": "8.22.0"
+  },
+  "license": "MIT"
+}

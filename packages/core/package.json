@@ -1,0 +1,14 @@
+{
+  "name": "@imd/core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared simulation, alerting and status logic used by every service and the dashboard demo mode.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT"
+}

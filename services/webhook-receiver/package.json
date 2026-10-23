@@ -1,0 +1,12 @@
+{
+  "name": "webhook-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mock on-call endpoint that receives incident webhooks and keeps the latest ones for inspection.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "license": "MIT"
+}

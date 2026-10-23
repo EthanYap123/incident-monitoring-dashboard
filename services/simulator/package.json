@@ -1,0 +1,15 @@
+{
+  "name": "telemetry-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates CPU, memory, error-rate and latency telemetry for the simulated fleet and ships it to the collector.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@imd/core": "file:../../packages/core"
+  },
+  "license": "MIT"
+}

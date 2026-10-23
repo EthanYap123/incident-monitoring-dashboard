@@ -1,0 +1,24 @@
+{
+  "name": "incident-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time observability dashboard for the incident monitoring stack.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "build:demo": "cross-env NEXT_PUBLIC_DATA_MODE=demo DEPLOY_TARGET=pages next build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@imd/core": "file:../packages/core",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "cross-env": "10.1.0",
+    "postcss": "8.5.31",
+    "tailwindcss": "4.3.3"
+  }
+}

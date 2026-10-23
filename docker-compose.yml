@@ -1,0 +1,73 @@
+name: incident-monitoring
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-monitor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-monitor}
+      POSTGRES_DB: ${POSTGRES_DB:-monitoring}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  webhook-receiver:
+    build:
+      context: .
+      dockerfile: services/webhook-receiver/Dockerfile
+    environment:
+      FAIL_RATE: ${WEBHOOK_FAIL_RATE:-0}
+    ports:
+      - "4002:4002"
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: .
+      dockerfile: services/collector/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-monitor}:${POSTGRES_PASSWORD:-monitor}@db:5432/${POSTGRES_DB:-monitoring}
+      SIMULATOR_URL: http://simulator:4001
+      WEBHOOK_URLS: ${WEBHOOK_URLS:-http://webhook-receiver:4002/hooks/incidents}
+      RETENTION_MINUTES: ${RETENTION_MINUTES:-60}
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      webhook-receiver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  simulator:
+    build:
+      context: .
+      dockerfile: services/simulator/Dockerfile
+    environment:
+      COLLECTOR_URL: http://collector:4000
+      TICK_MS: ${TICK_MS:-2000}
+    ports:
+      - "4001:4001"
+    depends_on:
+      collector:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      collector:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

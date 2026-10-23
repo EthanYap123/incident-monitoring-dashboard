@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-build:
+    name: Unit tests and dashboard build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Core engine tests
+        working-directory: packages/core
+        run: npm test
+
+      - name: Install services
+        run: |
+          (cd services/collector && npm ci)
+          (cd services/simulator && npm ci)
+
+      - name: Build dashboard
+        working-directory: dashboard
+        run: npm ci && npm run build
+
+  compose:
+    name: Docker Compose end-to-end
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Container status
+        run: docker compose ps
+
+      - name: Smoke test through the dashboard's nginx proxy
+        run: node scripts/smoke-test.mjs http://localhost:8080 http://localhost:4002
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
