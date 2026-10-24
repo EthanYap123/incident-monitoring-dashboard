@@ -143,6 +143,13 @@ docker-compose.yml      Orchestration, health checks and dependency order
 
 The simulator, collector and dashboard demo mode all import the same `@imd/core` package, so the in-browser demo behaves exactly like the containerised stack.
 
+## What I learned
+
+- **Containers don't start in order just because you list them in order.** The collector kept crashing because it started before PostgreSQL was ready to accept connections. Health checks plus `depends_on: condition: service_healthy` fixed it, and taught me that "running" and "ready" are different things.
+- **Alerting is mostly about *not* alerting.** My first version opened an incident on every spike, so a single noisy reading caused alert spam. Requiring 2 bad readings to open and 3 good readings to resolve (hysteresis) made the alerts calm and trustworthy.
+- **Real-time needs a plan B.** WebSockets drop, so the dashboard falls back to polling and catches up on reconnect. Designing for failure was more work than the happy path.
+- **Testing a whole stack is different from testing functions.** I wrote unit tests for the alert engine, but the CI smoke test that boots every container and checks they talk to each other caught bugs the unit tests never would.
+
 ## License
 
 MIT
