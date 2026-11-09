@@ -5,21 +5,32 @@ A small observability platform you can run with one command. A telemetry simulat
 **Live demo:** https://ethanyap123.github.io/incident-monitoring-dashboard/
 (GitHub Pages is static hosting, so the demo runs the same simulator and alert engine inside your browser. Run the Docker stack below for the full multi-container version.)
 
-![CI](https://github.com/EthanYap123/incident-monitoring-dashboard/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/EthanYap123/incident-monitoring-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/EthanYap123/incident-monitoring-dashboard/actions/workflows/ci.yml) [![Deploy demo](https://github.com/EthanYap123/incident-monitoring-dashboard/actions/workflows/pages.yml/badge.svg)](https://github.com/EthanYap123/incident-monitoring-dashboard/actions/workflows/pages.yml)
+
+![Dashboard with service health cards, live CPU and memory charts, chaos controls and alert thresholds](docs/screenshot.jpg)
+
+## Features
+
+- Four simulated services (API Gateway, Auth, Payments, Orders) with noisy, mean-reverting CPU, memory, error-rate, latency and traffic metrics
+- Threshold alerting with hysteresis: two bad readings open an incident, three good ones resolve it, and a critical reading escalates it
+- Incident webhooks with up to three attempts and backoff, and a log of every delivery
+- A live dashboard over WebSockets with a polling fallback: service health cards, charts, an incident log you can acknowledge, editable thresholds and chaos controls
+- Open incidents and edited thresholds survive a restart
+
+## Tech stack
+
+| Layer | Tools |
+| --- | --- |
+| Services | Node.js, Express, `ws` (simulator, collector, webhook receiver) |
+| Database | PostgreSQL 16 |
+| Dashboard | Next.js 16 (static export), Tailwind CSS 4, served by nginx |
+| Shared logic | `packages/core`: simulator and alert engine, used by the services and the browser demo |
+| Infrastructure | Docker Compose with health checks |
+| Testing and CI | Node's built-in test runner, a full-stack smoke test, GitHub Actions |
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  subgraph compose[docker compose]
-    sim[simulator<br/>Node.js :4001] -- POST /api/ingest every 2 s --> col[collector<br/>Express + ws :4000]
-    col -- SQL --> db[(PostgreSQL 16)]
-    col -- POST incident webhooks<br/>3 attempts + backoff --> hook[webhook-receiver<br/>:4002]
-    col -- scenario control --> sim
-    dash[dashboard<br/>nginx :8080] -- /api, /ws proxy --> col
-  end
-  browser((Browser)) -- HTTP + WebSocket --> dash
-```
+![Architecture: five Docker Compose containers; the simulator feeds the collector, which runs the alert engine, stores data in PostgreSQL, sends webhooks and streams to the dashboard behind nginx](docs/architecture.svg)
 
 | Container | What it does |
 | --- | --- |
@@ -30,35 +41,6 @@ flowchart LR
 | `dashboard` | Next.js 16 + Tailwind CSS 4 static export served by nginx, which also proxies `/api` and `/ws` to the collector so the browser only talks to one origin. |
 
 Every container has a health check, and Compose starts them in dependency order (`db` → `webhook-receiver` → `collector` → `simulator` / `dashboard`).
-
-## Run it locally with Docker
-
-You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine with the Compose plugin).
-
-```bash
-git clone https://github.com/EthanYap123/incident-monitoring-dashboard.git
-cd incident-monitoring-dashboard
-docker compose up --build
-```
-
-Then open **http://localhost:8080**.
-
-| URL | |
-| --- | --- |
-| http://localhost:8080 | Dashboard |
-| http://localhost:4000/healthz | Collector health (also `/api/...` directly) |
-| http://localhost:4001/control/scenarios | Simulator state |
-| http://localhost:4002/hooks/incidents | Webhooks the receiver has accepted |
-
-Stop with `Ctrl+C`, or `docker compose down` (add `-v` to also delete the database volume). To change ports, credentials or webhook targets, copy `.env.example` to `.env` and edit it.
-
-### Try it
-
-1. In **Chaos controls**, pick *Payments* and press **Server failure**. Within about 4 seconds the error-rate and latency incidents open, a toast appears, the tab title shows the count, and two `incident.opened` webhooks are delivered.
-2. Press **Acknowledge** on an incident in the log, and an `incident.acknowledged` webhook goes out.
-3. Press **Recover**. The metrics ease back to baseline, and after three clear samples the incidents resolve.
-4. Try **Traffic spike** on *All services*, or **Memory leak** and watch memory climb until it alerts.
-5. Lower a threshold in **Alert thresholds** and save. The rule is stored in PostgreSQL and every connected dashboard updates.
 
 ## How alerting works
 
@@ -98,7 +80,50 @@ All endpoints are on the collector (`:4000`) and proxied by the dashboard at `/a
 
 The dashboard uses the WebSocket and reconnects with exponential backoff. If the socket fails three times in a row it falls back to polling `/api/snapshot` every 3 seconds until the socket comes back.
 
-## Development without Docker
+## Project structure
+
+```
+packages/core/          Shared simulation, alert engine and health logic (+ node:test unit tests)
+services/simulator/     Telemetry generator and scenario control API
+services/collector/     Ingest API, PostgreSQL store, alerting, webhooks, WebSocket broadcast
+services/webhook-receiver/  Mock on-call endpoint
+dashboard/              Next.js + Tailwind dashboard, nginx config, live and demo data sources
+scripts/smoke-test.mjs  End-to-end check for a running stack
+docker-compose.yml      Orchestration, health checks and dependency order
+```
+
+The simulator, collector and dashboard demo mode all import the same `@imd/core` package, so the in-browser demo behaves exactly like the containerised stack.
+
+## Getting started
+
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine with the Compose plugin).
+
+```bash
+git clone https://github.com/EthanYap123/incident-monitoring-dashboard.git
+cd incident-monitoring-dashboard
+docker compose up --build
+```
+
+Then open **http://localhost:8080**.
+
+| URL | |
+| --- | --- |
+| http://localhost:8080 | Dashboard |
+| http://localhost:4000/healthz | Collector health (also `/api/...` directly) |
+| http://localhost:4001/control/scenarios | Simulator state |
+| http://localhost:4002/hooks/incidents | Webhooks the receiver has accepted |
+
+Stop with `Ctrl+C`, or `docker compose down` (add `-v` to also delete the database volume). To change ports, credentials or webhook targets, copy `.env.example` to `.env` and edit it.
+
+### Try it
+
+1. In **Chaos controls**, pick *Payments* and press **Server failure**. Within about 4 seconds the error-rate and latency incidents open, a toast appears, the tab title shows the count, and two `incident.opened` webhooks are delivered.
+2. Press **Acknowledge** on an incident in the log, and an `incident.acknowledged` webhook goes out.
+3. Press **Recover**. The metrics ease back to baseline, and after three clear samples the incidents resolve.
+4. Try **Traffic spike** on *All services*, or **Memory leak** and watch memory climb until it alerts.
+5. Lower a threshold in **Alert thresholds** and save. The rule is stored in PostgreSQL and every connected dashboard updates.
+
+### Development without Docker
 
 Requires Node.js 22.
 
@@ -124,24 +149,25 @@ Set `DATABASE_URL=postgres://user:pass@localhost:5432/monitoring` to point the c
 node scripts/smoke-test.mjs http://localhost:8080 http://localhost:4002
 ```
 
+## Testing
+
+```bash
+cd packages/core && npm test
+```
+
+- **15 unit tests** for the shared core: an incident opens only after consecutive breaches, a single spike opens nothing, warnings escalate, a breach during the clear window resets the countdown, open incidents are restored after a restart, and the simulator's failure, spike and memory-leak scenarios raise the right alerts while normal traffic stays quiet.
+- **A smoke test** ([`scripts/smoke-test.mjs`](scripts/smoke-test.mjs)) against the running stack, through the nginx proxy: the stack is up, the WebSocket streams samples, a server failure raises critical incidents, the webhook reaches the receiver, an incident can be acknowledged, recovery resolves everything and invalid thresholds are rejected.
+
 ## CI and deployment
 
 - **CI** (`.github/workflows/ci.yml`) runs the engine's unit tests, builds the dashboard, then builds the whole stack with `docker compose up --wait` and runs the smoke test through the nginx proxy.
 - **Pages** (`.github/workflows/pages.yml`) builds the demo export (`npm run build:demo`) and deploys it to GitHub Pages on every push to `main`.
 
-## Project structure
+## What I'd improve next
 
-```
-packages/core/          Shared simulation, alert engine and health logic (+ node:test unit tests)
-services/simulator/     Telemetry generator and scenario control API
-services/collector/     Ingest API, PostgreSQL store, alerting, webhooks, WebSocket broadcast
-services/webhook-receiver/  Mock on-call endpoint
-dashboard/              Next.js + Tailwind dashboard, nginx config, live and demo data sources
-scripts/smoke-test.mjs  End-to-end check for a running stack
-docker-compose.yml      Orchestration, health checks and dependency order
-```
-
-The simulator, collector and dashboard demo mode all import the same `@imd/core` package, so the in-browser demo behaves exactly like the containerised stack.
+- Add authentication to the endpoints that change state (`PUT /api/rules`, `POST /api/scenarios`, acknowledging incidents) before running it anywhere shared.
+- Downsample old samples instead of only deleting them after `RETENTION_MINUTES`, so the charts can show longer history.
+- Add tests for the collector's Postgres store, which only the smoke test covers today.
 
 ## What I learned
 
